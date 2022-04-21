@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_install_test/component/card_title.dart';
 import 'package:flutter_install_test/component/main_card.dart';
 import 'package:flutter_install_test/component/main_stat.dart';
-import 'package:flutter_install_test/model/stat_and_status_model.dart';
 import 'package:flutter_install_test/model/stat_model.dart';
 import 'package:flutter_install_test/utils/data_utils.dart';
 import 'package:hive_flutter/hive_flutter.dart';

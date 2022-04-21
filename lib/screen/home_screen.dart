@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_install_test/component/category_card.dart';
-import 'package:flutter_install_test/component/hourly_card.dart';
+import 'package:flutter_install_test/container/category_card.dart';
+import 'package:flutter_install_test/container/hourly_card.dart';
 import 'package:flutter_install_test/component/main_app_bar.dart';
 import 'package:flutter_install_test/component/main_drawer.dart';
 import 'package:flutter_install_test/const/colors.dart';
