@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_install_test/container/category_card.dart';
 import 'package:flutter_install_test/container/hourly_card.dart';
@@ -27,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
 
     scrollController.addListener(scrollListener);
+    fetchData();
   }
 
   @override
@@ -37,29 +39,63 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> fetchData() async {
-    List<Future> futures = [];
+    try {
+      final now = DateTime.now();
+      final fetchTime = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        now.hour,
+      );
 
-    for (ItemCode itemCode in ItemCode.values) {
-      futures.add(
-        StatRepository.fetchData(
-          itemCode: itemCode,
+      final box = Hive.box<StatModel>(ItemCode.PM10.name);
+
+      if (box.values.isNotEmpty &&
+          (box.values.last as StatModel).dataTime.isAtSameMomentAs(fetchTime)) {
+        print('이미 최신 데이터가 있습니다.');
+        return;
+      }
+
+      List<Future> futures = [];
+
+      for (ItemCode itemCode in ItemCode.values) {
+        futures.add(
+          StatRepository.fetchData(
+            itemCode: itemCode,
+          ),
+        );
+      }
+
+      final results = await Future.wait(futures);
+
+      for (int i = 0; i < results.length; i++) {
+        // ItemCode
+        final key = ItemCode.values[i];
+        // List<StatModel>
+        final value = results[i];
+
+        final box = Hive.box<StatModel>(key.name);
+
+        for (StatModel stat in value) {
+          box.put(stat.dataTime.toString(), stat);
+        }
+
+        final allKeys = box.keys.toList();
+
+        if (allKeys.length > 24) {
+          final deleteKeys = allKeys.sublist(0, allKeys.length - 24);
+
+          box.deleteAll(deleteKeys);
+        }
+      }
+    } on DioError catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '인터넷 연결이 원활하지 않습니다.',
+          ),
         ),
       );
-    }
-
-    final results = await Future.wait(futures);
-
-    for (int i = 0; i < results.length; i++) {
-      // ItemCode
-      final key = ItemCode.values[i];
-      // List<StatModel>
-      final value = results[i];
-
-      final box = Hive.box(key.name);
-
-      for (StatModel stat in value) {
-        box.put(stat.dataTime.toString(), stat);
-      }
     }
   }
 
@@ -78,7 +114,15 @@ class _HomeScreenState extends State<HomeScreen> {
     return ValueListenableBuilder<Box>(
       valueListenable: Hive.box<StatModel>(ItemCode.PM10.name).listenable(),
       builder: (context, box, widget) {
-        final recentStat = (box.values.toList().last as StatModel);
+        if (box.values.isEmpty) {
+          return Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        final recentStat = box.values.last as StatModel;
 
         final status = DataUtils.getStatusFromItemCodeAndValue(
           value: recentStat.getLevelFromRegion(region),
@@ -100,46 +144,51 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           body: Container(
             color: status.primaryColor,
-            child: CustomScrollView(
-              controller: scrollController,
-              slivers: [
-                MainAppBar(
-                  isExpanded: isExpanded,
-                  region: region,
-                  stat: recentStat,
-                  status: status,
-                  dateTime: recentStat.dataTime,
-                ),
-                SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      CategoryCard(
-                        region: region,
-                        darkColor: status.darkColor,
-                        lightColor: status.lightColor,
-                      ),
-                      SizedBox(height: 16.0),
-                      ...ItemCode.values.map(
-                        (itemCode) {
-                          return Padding(
-                            padding: const EdgeInsets.only(
-                              bottom: 16.0,
-                            ),
-                            child: HourlyCard(
-                              darkColor: status.darkColor,
-                              lightColor: status.lightColor,
-                              region: region,
-                              itemCode: itemCode,
-                            ),
-                          );
-                        },
-                      ).toList(),
-                      SizedBox(height: 16.0),
-                    ],
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await fetchData();
+              },
+              child: CustomScrollView(
+                controller: scrollController,
+                slivers: [
+                  MainAppBar(
+                    isExpanded: isExpanded,
+                    region: region,
+                    stat: recentStat,
+                    status: status,
+                    dateTime: recentStat.dataTime,
                   ),
-                ),
-              ],
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        CategoryCard(
+                          region: region,
+                          darkColor: status.darkColor,
+                          lightColor: status.lightColor,
+                        ),
+                        SizedBox(height: 16.0),
+                        ...ItemCode.values.map(
+                          (itemCode) {
+                            return Padding(
+                              padding: const EdgeInsets.only(
+                                bottom: 16.0,
+                              ),
+                              child: HourlyCard(
+                                darkColor: status.darkColor,
+                                lightColor: status.lightColor,
+                                region: region,
+                                itemCode: itemCode,
+                              ),
+                            );
+                          },
+                        ).toList(),
+                        SizedBox(height: 16.0),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
